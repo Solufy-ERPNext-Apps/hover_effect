@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../../../../../../tmp/tmp-42541-eyLsCNh6EOPE/hover_effect/hover_effect/public/css/hoverssss.bundle.css"],
+  "sourcesContent": ["#custom-hover-popover {\n    position: fixed; /* Use fixed for coordinates from clientX/clientY */\n    z-index: 1040;\n    width: 300px;\n    background: var(--bg-color, #ffffff);\n    border: 1px solid var(--border-color, #d1d8dd);\n    border-radius: var(--border-radius, 8px);\n    box-shadow: var(--shadow-base, 0 4px 12px rgba(0,0,0,0.15));\n    padding: 12px;\n    font-size: var(--text-md, 13px);\n    transition: opacity 0.2s ease;\n    pointer-events: auto; /* Allow interactions within popover */\n}\n\n#custom-hover-popover.hidden {\n    display: none;\n    opacity: 0;\n}\n\n#custom-hover-popover .hover-popover-header {\n    font-size: var(--text-base, 14px);\n}\n\n#custom-hover-popover .text-truncate {\n    white-space: nowrap;\n    overflow: hidden;\n    text-overflow: ellipsis;\n}\n\n#custom-hover-popover table {\n    width: 100%;\n    font-size: 12px;\n}\n\n#custom-hover-popover th {\n    text-align: right;\n    font-weight: 600;\n    border-bottom: 1px solid #ddd;\n}\n\n#custom-hover-popover td {\n    padding: 3px 0;\n}\n\n#custom-hover-popover .indicator-pill {\n    font-size: 11px;\n}"],
+  "mappings": ";AAAA;AACI;AACA;AACA;AACA;AACA;AACA;AACA;AACA;AACA;AACA;AACA;AAAA;AAGJ;AACI;AACA;AAAA;AAGJ;AACI;AAAA;AAGJ;AACI;AACA;AACA;AAAA;AAGJ;AACI;AACA;AAAA;AAGJ;AACI;AACA;AACA;AAAA;AAGJ;AACI;AAAA;AAGJ;AACI;AAAA;",
+  "names": []
+}
