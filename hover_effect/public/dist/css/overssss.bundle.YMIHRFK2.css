@@ -1,0 +1,110 @@
+/* ../../../../../../tmp/tmp-19047-gGhsMEWs3Nn2/hover_effect/hover_effect/public/css/overssss.bundle.css */
+.hover-popover {
+  position: fixed;
+  width: 650px;
+  background: var(--card-bg, #fff);
+  border-radius: var(--border-radius-md, 8px);
+  border: 1px solid var(--border-color, #e2e8f0);
+  box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06));
+  z-index: 9999;
+  cursor: default;
+  font-family: var(--font-stack, "Inter", sans-serif);
+  color: var(--text-color, #1f2937);
+}
+.hidden {
+  display: none;
+}
+.hover-header {
+  position: relative;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-color, #e2e8f0);
+  font-weight: 600;
+  font-size: 16px;
+  background-color: var(--bg-light-gray, #f9fafb);
+  border-top-left-radius: var(--border-radius-md, 8px);
+  border-top-right-radius: var(--border-radius-md, 8px);
+}
+.hover-header a {
+  color: var(--primary, #2490ef);
+  text-decoration: none;
+}
+.hover-header a:hover {
+  text-decoration: underline;
+}
+.hover-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  color: var(--text-muted, #6b7280);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  padding: 4px;
+  line-height: 1;
+}
+.hover-close:hover {
+  background: var(--bg-gray, #f3f4f6);
+  color: var(--text-color, #1f2937);
+}
+.hover-body {
+  padding: 16px;
+  max-height: 450px;
+  overflow-y: auto;
+}
+.hover-meta {
+  margin-bottom: 16px;
+  line-height: 1.6;
+  font-size: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.hover-section {
+  margin-top: 24px;
+}
+.hover-section-title {
+  font-weight: 600;
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: var(--text-color, #1f2937);
+}
+.hover-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: var(--border-radius-sm, 4px);
+  overflow: hidden;
+}
+.hover-table thead {
+  background-color: var(--bg-light-gray, #f9fafb);
+}
+.hover-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted, #6b7280);
+}
+.hover-table th,
+.hover-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color, #e2e8f0);
+}
+.hover-table tr:last-child td {
+  border-bottom: none;
+}
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--border-radius-full, 9999px);
+  background: var(--gray-100, #f3f4f6);
+  color: var(--text-color, #1f2937);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+/*# sourceMappingURL=overssss.bundle.YMIHRFK2.css.map */
