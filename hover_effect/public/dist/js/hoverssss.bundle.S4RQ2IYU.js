@@ -173,6 +173,20 @@
     document.head.appendChild(style);
   })();
   $(document).ready(function() {
+    let current_list_doctype = null;
+    frappe.router.on("change", () => {
+      const route = frappe.get_route();
+      if (route[0] !== "List")
+        return;
+      const new_doctype = route[1];
+      if (!current_list_doctype) {
+        current_list_doctype = new_doctype;
+        return;
+      }
+      if (current_list_doctype !== new_doctype) {
+        location.reload();
+      }
+    });
     const SUPPORTED_DOCTYPES = [
       "Sales Invoice",
       "Purchase Invoice",
@@ -545,4 +559,4 @@
     });
   });
 })();
-//# sourceMappingURL=hoverssss.bundle.V5S66BVQ.js.map
+//# sourceMappingURL=hoverssss.bundle.S4RQ2IYU.js.map

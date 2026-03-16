@@ -176,6 +176,27 @@ frappe.provide("hover_effect");
 
 $(document).ready(function () {
 
+    let current_list_doctype = null;
+
+    frappe.router.on('change', () => {
+
+        const route = frappe.get_route();
+
+        if (route[0] !== "List") return;
+
+        const new_doctype = route[1];
+
+        if (!current_list_doctype) {
+            current_list_doctype = new_doctype;
+            return;
+        }
+
+        if (current_list_doctype !== new_doctype) {
+            location.reload();
+        }
+
+    });
+
     const SUPPORTED_DOCTYPES = [
         "Sales Invoice", "Purchase Invoice",
         "Sales Order", "Purchase Order",
@@ -186,7 +207,7 @@ $(document).ready(function () {
     let current_hovered = null;
 
     /* ── Backdrop + Popover ── */
-    const $backdrop      = $(`<div id="hover-effect-backdrop" class="hidden"></div>`).appendTo("body");
+    const $backdrop = $(`<div id="hover-effect-backdrop" class="hidden"></div>`).appendTo("body");
     const $hover_popover = $(`<div id="custom-hover-popover" class="hidden"></div>`).appendTo("body");
 
     /* ── Hover trigger ── */
@@ -196,7 +217,7 @@ $(document).ready(function () {
         if (!doctype || !cur_list.data) return;
         if (!SUPPORTED_DOCTYPES.includes(doctype)) return;
 
-        let $row    = $(this).closest(".list-row");
+        let $row = $(this).closest(".list-row");
         let docname = $row.attr("data-name");
         if (!docname) {
             let idx = $(".list-row").index($row);
@@ -307,81 +328,81 @@ $(document).ready(function () {
 
     /* ── Render ── */
     function render_popover_content(data, doctype, name) {
-        const doc      = data.doc || {};
+        const doc = data.doc || {};
         const currency = doc.currency || doc.default_currency || "INR";
 
         let party_label = "", party_name = "", meta_rows = [];
 
         if (doctype === "Sales Invoice") {
             party_label = "Customer";
-            party_name  = doc.customer_name || doc.customer || "";
+            party_name = doc.customer_name || doc.customer || "";
             meta_rows = [
-                { label: "Date",        value: fmt_date(doc.posting_date) },
-                { label: "Due Date",    value: fmt_date(doc.due_date) },
+                { label: "Date", value: fmt_date(doc.posting_date) },
+                { label: "Due Date", value: fmt_date(doc.due_date) },
                 { label: "Grand Total", value: fmt_currency(doc.grand_total, currency), bold: true },
                 { label: "Outstanding", value: fmt_currency(doc.outstanding_amount, currency) },
             ];
         } else if (doctype === "Purchase Invoice") {
             party_label = "Supplier";
-            party_name  = doc.supplier_name || doc.supplier || "";
+            party_name = doc.supplier_name || doc.supplier || "";
             meta_rows = [
-                { label: "Date",        value: fmt_date(doc.posting_date) },
-                { label: "Due Date",    value: fmt_date(doc.due_date) },
+                { label: "Date", value: fmt_date(doc.posting_date) },
+                { label: "Due Date", value: fmt_date(doc.due_date) },
                 { label: "Grand Total", value: fmt_currency(doc.grand_total, currency), bold: true },
                 { label: "Outstanding", value: fmt_currency(doc.outstanding_amount, currency) },
             ];
         } else if (doctype === "Sales Order") {
             party_label = "Customer";
-            party_name  = doc.customer_name || doc.customer || "";
+            party_name = doc.customer_name || doc.customer || "";
             meta_rows = [
-                { label: "Date",         value: fmt_date(doc.transaction_date) },
-                { label: "Delivery",     value: fmt_date(doc.delivery_date) },
-                { label: "Grand Total",  value: fmt_currency(doc.grand_total, currency), bold: true },
+                { label: "Date", value: fmt_date(doc.transaction_date) },
+                { label: "Delivery", value: fmt_date(doc.delivery_date) },
+                { label: "Grand Total", value: fmt_currency(doc.grand_total, currency), bold: true },
                 { label: "Advance Paid", value: fmt_currency(doc.advance_paid, currency) },
             ];
         } else if (doctype === "Purchase Order") {
             party_label = "Supplier";
-            party_name  = doc.supplier_name || doc.supplier || "";
+            party_name = doc.supplier_name || doc.supplier || "";
             meta_rows = [
-                { label: "Date",         value: fmt_date(doc.transaction_date) },
-                { label: "Required By",  value: fmt_date(doc.schedule_date) },
-                { label: "Grand Total",  value: fmt_currency(doc.grand_total, currency), bold: true },
+                { label: "Date", value: fmt_date(doc.transaction_date) },
+                { label: "Required By", value: fmt_date(doc.schedule_date) },
+                { label: "Grand Total", value: fmt_currency(doc.grand_total, currency), bold: true },
                 { label: "Advance Paid", value: fmt_currency(doc.advance_paid, currency) },
             ];
         } else if (doctype === "Payment Entry") {
             party_label = "Party";
-            party_name  = doc.party_name || doc.party || "";
+            party_name = doc.party_name || doc.party || "";
             meta_rows = [
-                { label: "Date",        value: fmt_date(doc.posting_date) },
-                { label: "Mode",        value: doc.mode_of_payment || "—" },
+                { label: "Date", value: fmt_date(doc.posting_date) },
+                { label: "Mode", value: doc.mode_of_payment || "—" },
                 { label: "Paid Amount", value: fmt_currency(doc.paid_amount, currency), bold: true },
-                { label: "Type",        value: doc.payment_type || "—" },
+                { label: "Type", value: doc.payment_type || "—" },
             ];
         } else if (doctype === "Customer") {
             party_label = "Customer Group";
-            party_name  = doc.customer_group || "";
+            party_name = doc.customer_group || "";
             meta_rows = [
-                { label: "Territory",     value: doc.territory     || "—" },
-                { label: "Type",          value: doc.customer_type || "—" },
-                { label: "Tax ID",        value: doc.tax_id        || "—" },
-                { label: "Email",         value: doc.email_id      || "—" },
-                { label: "Mobile",        value: doc.mobile_no     || "—" },
+                { label: "Territory", value: doc.territory || "—" },
+                { label: "Type", value: doc.customer_type || "—" },
+                { label: "Tax ID", value: doc.tax_id || "—" },
+                { label: "Email", value: doc.email_id || "—" },
+                { label: "Mobile", value: doc.mobile_no || "—" },
                 { label: "Payment Terms", value: doc.payment_terms || "—" },
             ];
         } else if (doctype === "Supplier") {
             party_label = "Supplier Group";
-            party_name  = doc.supplier_group || "";
+            party_name = doc.supplier_group || "";
             meta_rows = [
-                { label: "Type",          value: doc.supplier_type || "—" },
-                { label: "Country",       value: doc.country       || "—" },
-                { label: "Tax ID",        value: doc.tax_id        || "—" },
-                { label: "Email",         value: doc.email_id      || "—" },
-                { label: "Mobile",        value: doc.mobile_no     || "—" },
+                { label: "Type", value: doc.supplier_type || "—" },
+                { label: "Country", value: doc.country || "—" },
+                { label: "Tax ID", value: doc.tax_id || "—" },
+                { label: "Email", value: doc.email_id || "—" },
+                { label: "Mobile", value: doc.mobile_no || "—" },
                 { label: "Payment Terms", value: doc.payment_terms || "—" },
             ];
         }
 
-        const status     = doc.status || (doc.disabled ? "Disabled" : "");
+        const status = doc.status || (doc.disabled ? "Disabled" : "");
         const status_cls = get_status_class(status);
 
         const meta_html = `
@@ -446,41 +467,41 @@ $(document).ready(function () {
         if (doctype === "Customer" && data.summary) {
             const s = data.summary;
             party_html += render_summary_cards([
-                { label: "Total Billed",  value: fmt_currency(s.total_billed, currency),     count: `${s.si_count} invoice${s.si_count !== 1 ? "s" : ""}` },
-                { label: "Outstanding",   value: fmt_currency(s.total_outstanding, currency), count: "unpaid balance",  cls: s.total_outstanding > 0 ? "warning" : "" },
-                { label: "Overdue",       value: s.overdue_count,                             count: `invoice${s.overdue_count !== 1 ? "s" : ""}`, cls: s.overdue_count > 0 ? "danger" : "" },
-                { label: "Total Orders",  value: fmt_currency(s.total_ordered, currency),     count: `${s.so_count} order${s.so_count !== 1 ? "s" : ""}` },
-                { label: "Total Paid",    value: fmt_currency(s.total_paid, currency),        count: `${s.pe_count} payment${s.pe_count !== 1 ? "s" : ""}` },
-                { label: "Deliveries",    value: s.dn_count,                                  count: "delivery notes" },
+                { label: "Total Billed", value: fmt_currency(s.total_billed, currency), count: `${s.si_count} invoice${s.si_count !== 1 ? "s" : ""}` },
+                { label: "Outstanding", value: fmt_currency(s.total_outstanding, currency), count: "unpaid balance", cls: s.total_outstanding > 0 ? "warning" : "" },
+                { label: "Overdue", value: s.overdue_count, count: `invoice${s.overdue_count !== 1 ? "s" : ""}`, cls: s.overdue_count > 0 ? "danger" : "" },
+                { label: "Total Orders", value: fmt_currency(s.total_ordered, currency), count: `${s.so_count} order${s.so_count !== 1 ? "s" : ""}` },
+                { label: "Total Paid", value: fmt_currency(s.total_paid, currency), count: `${s.pe_count} payment${s.pe_count !== 1 ? "s" : ""}` },
+                { label: "Deliveries", value: s.dn_count, count: "delivery notes" },
             ]);
             party_html += render_doc_section("Sales Invoices", data.sales_invoices, [
-                { label: "Invoice",     render: r => `<a href="/app/sales-invoice/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
-                { label: "Date",        render: r => fmt_date(r.posting_date) },
-                { label: "Due",         render: r => fmt_date(r.due_date) },
-                { label: "Amount",      render: r => fmt_currency(r.grand_total, r.currency), cls: "num" },
+                { label: "Invoice", render: r => `<a href="/app/sales-invoice/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
+                { label: "Date", render: r => fmt_date(r.posting_date) },
+                { label: "Due", render: r => fmt_date(r.due_date) },
+                { label: "Amount", render: r => fmt_currency(r.grand_total, r.currency), cls: "num" },
                 { label: "Outstanding", render: r => fmt_currency(r.outstanding_amount, r.currency), cls: "num" },
-                { label: "Status",      render: r => `<span class="status-pill ${get_status_class(r.status)}">${esc(r.status || "—")}</span>` },
+                { label: "Status", render: r => `<span class="status-pill ${get_status_class(r.status)}">${esc(r.status || "—")}</span>` },
             ]);
             party_html += render_doc_section("Sales Orders", data.sales_orders, [
-                { label: "Order",    render: r => `<a href="/app/sales-order/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
-                { label: "Date",     render: r => fmt_date(r.transaction_date) },
+                { label: "Order", render: r => `<a href="/app/sales-order/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
+                { label: "Date", render: r => fmt_date(r.transaction_date) },
                 { label: "Delivery", render: r => fmt_date(r.delivery_date) },
-                { label: "Amount",   render: r => fmt_currency(r.grand_total, r.currency), cls: "num" },
-                { label: "Advance",  render: r => fmt_currency(r.advance_paid, r.currency), cls: "num" },
-                { label: "Status",   render: r => `<span class="status-pill ${get_status_class(r.status)}">${esc(r.status || "—")}</span>` },
+                { label: "Amount", render: r => fmt_currency(r.grand_total, r.currency), cls: "num" },
+                { label: "Advance", render: r => fmt_currency(r.advance_paid, r.currency), cls: "num" },
+                { label: "Status", render: r => `<span class="status-pill ${get_status_class(r.status)}">${esc(r.status || "—")}</span>` },
             ]);
             party_html += render_doc_section("Delivery Notes", data.delivery_notes, [
-                { label: "Note",   render: r => `<a href="/app/delivery-note/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
-                { label: "Date",   render: r => fmt_date(r.posting_date) },
+                { label: "Note", render: r => `<a href="/app/delivery-note/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
+                { label: "Date", render: r => fmt_date(r.posting_date) },
                 { label: "Amount", render: r => fmt_currency(r.grand_total, r.currency), cls: "num" },
                 { label: "Status", render: r => `<span class="status-pill ${get_status_class(r.status)}">${esc(r.status || "—")}</span>` },
             ]);
             party_html += render_doc_section("Payments", data.payments, [
-                { label: "Entry",  render: r => `<a href="/app/payment-entry/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
-                { label: "Date",   render: r => fmt_date(r.posting_date) },
-                { label: "Mode",   render: r => esc(r.mode_of_payment || "—") },
+                { label: "Entry", render: r => `<a href="/app/payment-entry/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
+                { label: "Date", render: r => fmt_date(r.posting_date) },
+                { label: "Mode", render: r => esc(r.mode_of_payment || "—") },
                 { label: "Amount", render: r => fmt_currency(r.paid_amount, r.currency), cls: "num" },
-                { label: "Type",   render: r => esc(r.payment_type || "—") },
+                { label: "Type", render: r => esc(r.payment_type || "—") },
             ]);
         }
 
@@ -488,41 +509,41 @@ $(document).ready(function () {
         if (doctype === "Supplier" && data.summary) {
             const s = data.summary;
             party_html += render_summary_cards([
-                { label: "Total Billed",  value: fmt_currency(s.total_billed, currency),     count: `${s.pi_count} invoice${s.pi_count !== 1 ? "s" : ""}` },
-                { label: "Outstanding",   value: fmt_currency(s.total_outstanding, currency), count: "unpaid balance", cls: s.total_outstanding > 0 ? "warning" : "" },
-                { label: "Overdue",       value: s.overdue_count,                             count: `invoice${s.overdue_count !== 1 ? "s" : ""}`, cls: s.overdue_count > 0 ? "danger" : "" },
-                { label: "Total Orders",  value: fmt_currency(s.total_ordered, currency),     count: `${s.po_count} order${s.po_count !== 1 ? "s" : ""}` },
-                { label: "Total Paid",    value: fmt_currency(s.total_paid, currency),        count: `${s.pe_count} payment${s.pe_count !== 1 ? "s" : ""}` },
-                { label: "Receipts",      value: s.pr_count,                                  count: "purchase receipts" },
+                { label: "Total Billed", value: fmt_currency(s.total_billed, currency), count: `${s.pi_count} invoice${s.pi_count !== 1 ? "s" : ""}` },
+                { label: "Outstanding", value: fmt_currency(s.total_outstanding, currency), count: "unpaid balance", cls: s.total_outstanding > 0 ? "warning" : "" },
+                { label: "Overdue", value: s.overdue_count, count: `invoice${s.overdue_count !== 1 ? "s" : ""}`, cls: s.overdue_count > 0 ? "danger" : "" },
+                { label: "Total Orders", value: fmt_currency(s.total_ordered, currency), count: `${s.po_count} order${s.po_count !== 1 ? "s" : ""}` },
+                { label: "Total Paid", value: fmt_currency(s.total_paid, currency), count: `${s.pe_count} payment${s.pe_count !== 1 ? "s" : ""}` },
+                { label: "Receipts", value: s.pr_count, count: "purchase receipts" },
             ]);
             party_html += render_doc_section("Purchase Invoices", data.purchase_invoices, [
-                { label: "Invoice",     render: r => `<a href="/app/purchase-invoice/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
-                { label: "Date",        render: r => fmt_date(r.posting_date) },
-                { label: "Due",         render: r => fmt_date(r.due_date) },
-                { label: "Amount",      render: r => fmt_currency(r.grand_total, r.currency), cls: "num" },
+                { label: "Invoice", render: r => `<a href="/app/purchase-invoice/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
+                { label: "Date", render: r => fmt_date(r.posting_date) },
+                { label: "Due", render: r => fmt_date(r.due_date) },
+                { label: "Amount", render: r => fmt_currency(r.grand_total, r.currency), cls: "num" },
                 { label: "Outstanding", render: r => fmt_currency(r.outstanding_amount, r.currency), cls: "num" },
-                { label: "Status",      render: r => `<span class="status-pill ${get_status_class(r.status)}">${esc(r.status || "—")}</span>` },
+                { label: "Status", render: r => `<span class="status-pill ${get_status_class(r.status)}">${esc(r.status || "—")}</span>` },
             ]);
             party_html += render_doc_section("Purchase Orders", data.purchase_orders, [
-                { label: "Order",    render: r => `<a href="/app/purchase-order/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
-                { label: "Date",     render: r => fmt_date(r.transaction_date) },
+                { label: "Order", render: r => `<a href="/app/purchase-order/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
+                { label: "Date", render: r => fmt_date(r.transaction_date) },
                 { label: "Required", render: r => fmt_date(r.schedule_date) },
-                { label: "Amount",   render: r => fmt_currency(r.grand_total, r.currency), cls: "num" },
-                { label: "Advance",  render: r => fmt_currency(r.advance_paid, r.currency), cls: "num" },
-                { label: "Status",   render: r => `<span class="status-pill ${get_status_class(r.status)}">${esc(r.status || "—")}</span>` },
+                { label: "Amount", render: r => fmt_currency(r.grand_total, r.currency), cls: "num" },
+                { label: "Advance", render: r => fmt_currency(r.advance_paid, r.currency), cls: "num" },
+                { label: "Status", render: r => `<span class="status-pill ${get_status_class(r.status)}">${esc(r.status || "—")}</span>` },
             ]);
             party_html += render_doc_section("Purchase Receipts", data.purchase_receipts, [
                 { label: "Receipt", render: r => `<a href="/app/purchase-receipt/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
-                { label: "Date",    render: r => fmt_date(r.posting_date) },
-                { label: "Amount",  render: r => fmt_currency(r.grand_total, r.currency), cls: "num" },
-                { label: "Status",  render: r => `<span class="status-pill ${get_status_class(r.status)}">${esc(r.status || "—")}</span>` },
+                { label: "Date", render: r => fmt_date(r.posting_date) },
+                { label: "Amount", render: r => fmt_currency(r.grand_total, r.currency), cls: "num" },
+                { label: "Status", render: r => `<span class="status-pill ${get_status_class(r.status)}">${esc(r.status || "—")}</span>` },
             ]);
             party_html += render_doc_section("Payments", data.payments, [
-                { label: "Entry",  render: r => `<a href="/app/payment-entry/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
-                { label: "Date",   render: r => fmt_date(r.posting_date) },
-                { label: "Mode",   render: r => esc(r.mode_of_payment || "—") },
+                { label: "Entry", render: r => `<a href="/app/payment-entry/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
+                { label: "Date", render: r => fmt_date(r.posting_date) },
+                { label: "Mode", render: r => esc(r.mode_of_payment || "—") },
                 { label: "Amount", render: r => fmt_currency(r.paid_amount, r.currency), cls: "num" },
-                { label: "Type",   render: r => esc(r.payment_type || "—") },
+                { label: "Type", render: r => esc(r.payment_type || "—") },
             ]);
         }
 

@@ -26,6 +26,10 @@ def get_hover_details(doctype, name):
     doc = frappe.get_doc(doctype, name)
     result = {"doc": doc.as_dict()}
 
+    # ----------------------------------------------------------
+    # Sales / Purchase Documents
+    # ----------------------------------------------------------
+
     if doctype in (
         "Sales Invoice",
         "Purchase Invoice",
@@ -35,13 +39,13 @@ def get_hover_details(doctype, name):
 
         result["items"] = [
             {
-                "item_code": item.item_code,
-                "item_name": item.item_name or item.item_code,
-                "qty": item.qty,
-                "rate": item.rate,
-                "amount": item.amount,
+                "item_code": d.item_code,
+                "item_name": d.item_name or d.item_code,
+                "qty": d.qty,
+                "rate": d.rate,
+                "amount": d.amount,
             }
-            for item in (doc.items or [])
+            for d in (doc.items or [])
         ]
 
         if doc.docstatus == 1:
@@ -58,15 +62,19 @@ def get_hover_details(doctype, name):
         else:
             result["gl_entries"] = []
 
+    # ----------------------------------------------------------
+    # Payment Entry
+    # ----------------------------------------------------------
+
     elif doctype == "Payment Entry":
 
         result["accounts"] = [
             {
-                "account": acc.account,
-                "debit_in_account_currency": acc.debit_in_account_currency,
-                "credit_in_account_currency": acc.credit_in_account_currency,
+                "account": d.account,
+                "debit_in_account_currency": d.debit_in_account_currency,
+                "credit_in_account_currency": d.credit_in_account_currency,
             }
-            for acc in (getattr(doc, "accounts", None) or [])
+            for d in (getattr(doc, "accounts", None) or [])
         ]
 
         if doc.docstatus == 1:
@@ -83,6 +91,10 @@ def get_hover_details(doctype, name):
         else:
             result["gl_entries"] = []
 
+    # ----------------------------------------------------------
+    # Customer / Supplier
+    # ----------------------------------------------------------
+
     elif doctype == "Customer":
         result.update(_get_customer_details(name))
 
@@ -91,6 +103,26 @@ def get_hover_details(doctype, name):
 
     return result
 
+
+# ==============================================================
+# Helper for SUM queries (fix for frappe v15+ restriction)
+# ==============================================================
+
+def get_sum(doctype, field, filters):
+    value = frappe.db.sql(
+        f"""
+        SELECT SUM({field})
+        FROM `tab{doctype}`
+        WHERE {" AND ".join([f"{k}=%s" for k in filters.keys()])}
+        """,
+        tuple(filters.values()),
+    )
+    return value[0][0] or 0
+
+
+# ==============================================================
+# Customer Details
+# ==============================================================
 
 def _get_customer_details(name):
 
@@ -111,6 +143,7 @@ def _get_customer_details(name):
         order_by="posting_date desc",
         limit=5,
     )
+
     for r in data["sales_invoices"]:
         r["doctype"] = "Sales Invoice"
 
@@ -129,6 +162,7 @@ def _get_customer_details(name):
         order_by="transaction_date desc",
         limit=5,
     )
+
     for r in data["sales_orders"]:
         r["doctype"] = "Sales Order"
 
@@ -139,6 +173,7 @@ def _get_customer_details(name):
         order_by="posting_date desc",
         limit=5,
     )
+
     for r in data["delivery_notes"]:
         r["doctype"] = "Delivery Note"
 
@@ -156,71 +191,68 @@ def _get_customer_details(name):
         order_by="posting_date desc",
         limit=5,
     )
+
     for r in data["payments"]:
         r["doctype"] = "Payment Entry"
         r["currency"] = r.pop("paid_from_account_currency", "INR")
 
-    si_totals = (
-        frappe.db.get_value(
-            "Sales Invoice",
-            filters={"customer": name, "docstatus": 1},
-            fieldname=[
-                "sum(grand_total) as total_billed",
-                "sum(outstanding_amount) as total_outstanding",
-            ],
-            as_dict=True,
-        )
-        or {}
+    # ----------------------------------------------------------
+    # Totals (FIXED)
+    # ----------------------------------------------------------
+
+    total_billed = get_sum(
+        "Sales Invoice",
+        "grand_total",
+        {"customer": name, "docstatus": 1},
     )
 
-    so_totals = (
-        frappe.db.get_value(
-            "Sales Order",
-            filters={"customer": name, "docstatus": 1},
-            fieldname=[
-                "sum(grand_total) as total_ordered",
-                "sum(advance_paid) as total_advance",
-            ],
-            as_dict=True,
-        )
-        or {}
+    total_outstanding = get_sum(
+        "Sales Invoice",
+        "outstanding_amount",
+        {"customer": name, "docstatus": 1},
     )
 
-    payment_totals = (
-        frappe.db.get_value(
-            "Payment Entry",
-            filters={"party_type": "Customer", "party": name, "docstatus": 1},
-            fieldname=["sum(paid_amount) as total_paid"],
-            as_dict=True,
-        )
-        or {}
+    total_ordered = get_sum(
+        "Sales Order",
+        "grand_total",
+        {"customer": name, "docstatus": 1},
     )
 
-    si_count = frappe.db.count("Sales Invoice", {"customer": name, "docstatus": 1})
-    so_count = frappe.db.count("Sales Order", {"customer": name, "docstatus": 1})
-    dn_count = frappe.db.count("Delivery Note", {"customer": name, "docstatus": 1})
-    pe_count = frappe.db.count(
-        "Payment Entry", {"party_type": "Customer", "party": name, "docstatus": 1}
+    total_advance = get_sum(
+        "Sales Order",
+        "advance_paid",
+        {"customer": name, "docstatus": 1},
     )
-    overdue_count = frappe.db.count(
-        "Sales Invoice", {"customer": name, "docstatus": 1, "status": "Overdue"}
+
+    total_paid = get_sum(
+        "Payment Entry",
+        "paid_amount",
+        {"party_type": "Customer", "party": name, "docstatus": 1},
     )
 
     data["summary"] = {
-        "total_billed": si_totals.get("total_billed") or 0,
-        "total_outstanding": si_totals.get("total_outstanding") or 0,
-        "total_ordered": so_totals.get("total_ordered") or 0,
-        "total_advance": so_totals.get("total_advance") or 0,
-        "total_paid": payment_totals.get("total_paid") or 0,
-        "si_count": si_count,
-        "so_count": so_count,
-        "dn_count": dn_count,
-        "pe_count": pe_count,
-        "overdue_count": overdue_count,
+        "total_billed": total_billed,
+        "total_outstanding": total_outstanding,
+        "total_ordered": total_ordered,
+        "total_advance": total_advance,
+        "total_paid": total_paid,
+        "si_count": frappe.db.count("Sales Invoice", {"customer": name, "docstatus": 1}),
+        "so_count": frappe.db.count("Sales Order", {"customer": name, "docstatus": 1}),
+        "dn_count": frappe.db.count("Delivery Note", {"customer": name, "docstatus": 1}),
+        "pe_count": frappe.db.count(
+            "Payment Entry", {"party_type": "Customer", "party": name, "docstatus": 1}
+        ),
+        "overdue_count": frappe.db.count(
+            "Sales Invoice", {"customer": name, "docstatus": 1, "status": "Overdue"}
+        ),
     }
 
     return data
 
+
+# ==============================================================
+# Supplier Details
+# ==============================================================
 
 def _get_supplier_details(name):
 
@@ -241,6 +273,7 @@ def _get_supplier_details(name):
         order_by="posting_date desc",
         limit=5,
     )
+
     for r in data["purchase_invoices"]:
         r["doctype"] = "Purchase Invoice"
 
@@ -259,6 +292,7 @@ def _get_supplier_details(name):
         order_by="transaction_date desc",
         limit=5,
     )
+
     for r in data["purchase_orders"]:
         r["doctype"] = "Purchase Order"
 
@@ -269,6 +303,7 @@ def _get_supplier_details(name):
         order_by="posting_date desc",
         limit=5,
     )
+
     for r in data["purchase_receipts"]:
         r["doctype"] = "Purchase Receipt"
 
@@ -286,67 +321,56 @@ def _get_supplier_details(name):
         order_by="posting_date desc",
         limit=5,
     )
+
     for r in data["payments"]:
         r["doctype"] = "Payment Entry"
         r["currency"] = r.pop("paid_to_account_currency", "INR")
 
-    pi_totals = (
-        frappe.db.get_value(
-            "Purchase Invoice",
-            filters={"supplier": name, "docstatus": 1},
-            fieldname=[
-                "sum(grand_total) as total_billed",
-                "sum(outstanding_amount) as total_outstanding",
-            ],
-            as_dict=True,
-        )
-        or {}
+    total_billed = get_sum(
+        "Purchase Invoice",
+        "grand_total",
+        {"supplier": name, "docstatus": 1},
     )
 
-    po_totals = (
-        frappe.db.get_value(
-            "Purchase Order",
-            filters={"supplier": name, "docstatus": 1},
-            fieldname=[
-                "sum(grand_total) as total_ordered",
-                "sum(advance_paid) as total_advance",
-            ],
-            as_dict=True,
-        )
-        or {}
+    total_outstanding = get_sum(
+        "Purchase Invoice",
+        "outstanding_amount",
+        {"supplier": name, "docstatus": 1},
     )
 
-    payment_totals = (
-        frappe.db.get_value(
-            "Payment Entry",
-            filters={"party_type": "Supplier", "party": name, "docstatus": 1},
-            fieldname=["sum(paid_amount) as total_paid"],
-            as_dict=True,
-        )
-        or {}
+    total_ordered = get_sum(
+        "Purchase Order",
+        "grand_total",
+        {"supplier": name, "docstatus": 1},
     )
 
-    pi_count = frappe.db.count("Purchase Invoice", {"supplier": name, "docstatus": 1})
-    po_count = frappe.db.count("Purchase Order", {"supplier": name, "docstatus": 1})
-    pr_count = frappe.db.count("Purchase Receipt", {"supplier": name, "docstatus": 1})
-    pe_count = frappe.db.count(
-        "Payment Entry", {"party_type": "Supplier", "party": name, "docstatus": 1}
+    total_advance = get_sum(
+        "Purchase Order",
+        "advance_paid",
+        {"supplier": name, "docstatus": 1},
     )
-    overdue_count = frappe.db.count(
-        "Purchase Invoice", {"supplier": name, "docstatus": 1, "status": "Overdue"}
+
+    total_paid = get_sum(
+        "Payment Entry",
+        "paid_amount",
+        {"party_type": "Supplier", "party": name, "docstatus": 1},
     )
 
     data["summary"] = {
-        "total_billed": pi_totals.get("total_billed") or 0,
-        "total_outstanding": pi_totals.get("total_outstanding") or 0,
-        "total_ordered": po_totals.get("total_ordered") or 0,
-        "total_advance": po_totals.get("total_advance") or 0,
-        "total_paid": payment_totals.get("total_paid") or 0,
-        "pi_count": pi_count,
-        "po_count": po_count,
-        "pr_count": pr_count,
-        "pe_count": pe_count,
-        "overdue_count": overdue_count,
+        "total_billed": total_billed,
+        "total_outstanding": total_outstanding,
+        "total_ordered": total_ordered,
+        "total_advance": total_advance,
+        "total_paid": total_paid,
+        "pi_count": frappe.db.count("Purchase Invoice", {"supplier": name, "docstatus": 1}),
+        "po_count": frappe.db.count("Purchase Order", {"supplier": name, "docstatus": 1}),
+        "pr_count": frappe.db.count("Purchase Receipt", {"supplier": name, "docstatus": 1}),
+        "pe_count": frappe.db.count(
+            "Payment Entry", {"party_type": "Supplier", "party": name, "docstatus": 1}
+        ),
+        "overdue_count": frappe.db.count(
+            "Purchase Invoice", {"supplier": name, "docstatus": 1, "status": "Overdue"}
+        ),
     }
 
     return data
