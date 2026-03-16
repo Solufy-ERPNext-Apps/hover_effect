@@ -1,10 +1,9 @@
 frappe.provide("hover_effect");
 
 (function inject_hover_styles() {
-    if (document.getElementById("hover-effect-styles")) return;
+  if (document.getElementById("hover-effect-styles")) return;
 
-    const css = `
-        /* ── Backdrop ── */
+  const css = `
         #hover-effect-backdrop {
             display: none;
             position: fixed;
@@ -167,392 +166,622 @@ frappe.provide("hover_effect");
         .hover-error { padding: 40px; color: #b94a48; font-size: 14px; text-align: center; }
     `;
 
-    const style = document.createElement("style");
-    style.id = "hover-effect-styles";
-    style.textContent = css;
-    document.head.appendChild(style);
+  const style = document.createElement("style");
+  style.id = "hover-effect-styles";
+  style.textContent = css;
+  document.head.appendChild(style);
 })();
 
-
 $(document).ready(function () {
+  let current_list_doctype = null;
 
-    let current_list_doctype = null;
+  frappe.router.on("change", () => {
+    const route = frappe.get_route();
 
-    frappe.router.on('change', () => {
+    if (route[0] !== "List") return;
 
-        const route = frappe.get_route();
+    const new_doctype = route[1];
 
-        if (route[0] !== "List") return;
+    if (!current_list_doctype) {
+      current_list_doctype = new_doctype;
+      return;
+    }
 
-        const new_doctype = route[1];
+    if (current_list_doctype !== new_doctype) {
+      location.reload();
+    }
+  });
 
-        if (!current_list_doctype) {
-            current_list_doctype = new_doctype;
-            return;
+  const SUPPORTED_DOCTYPES = [
+    "Sales Invoice",
+    "Purchase Invoice",
+    "Sales Order",
+    "Purchase Order",
+    "Customer",
+    "Supplier",
+    "Payment Entry",
+  ];
+
+  let hover_timeout;
+  let current_hovered = null;
+
+  /* ── Backdrop + Popover ── */
+  const $backdrop = $(`<div id="hover-effect-backdrop" class="hidden"></div>`).appendTo("body");
+  const $hover_popover = $(`<div id="custom-hover-popover" class="hidden"></div>`).appendTo(
+    "body"
+  );
+
+  /* ── Hover trigger ── */
+  $(document).on("mouseenter", "a.filterable.ellipsis", function (e) {
+    clearTimeout(hover_timeout);
+    let doctype = cur_list ? cur_list.doctype : null;
+    if (!doctype || !cur_list.data) return;
+    if (!SUPPORTED_DOCTYPES.includes(doctype)) return;
+
+    let $row = $(this).closest(".list-row");
+    let docname = $row.attr("data-name");
+    if (!docname) {
+      let idx = $(".list-row").index($row);
+      docname = cur_list.data[idx]?.name;
+    }
+    if (!docname || current_hovered === docname) return;
+    current_hovered = docname;
+
+    hover_timeout = setTimeout(() => show_hover_popover(doctype, docname), 350);
+  });
+
+  /* ── Hide on list row leave ── */
+  $(document).on("mouseleave", ".list-row", function () {
+    clearTimeout(hover_timeout);
+  });
+
+  /* ── Close on backdrop click ── */
+  $backdrop.on("click", hide_hover_popover);
+
+  /* ── Close on Escape ── */
+  $(document).on("keydown.hover_effect", function (e) {
+    if (e.key === "Escape") hide_hover_popover();
+  });
+
+  /* ── Prevent popover clicks from bubbling ── */
+  $hover_popover.on("click", function (e) {
+    e.stopPropagation();
+  });
+
+  /* ── Show ── */
+  function show_hover_popover(doctype, name) {
+    $backdrop.removeClass("hidden").addClass("visible");
+    $hover_popover
+      .removeClass("hidden")
+      .html(
+        `<div class="hover-header"><div class="hover-title">${frappe.utils.escape_html(
+          doctype
+        )}: <span class="hover-docname">${frappe.utils.escape_html(
+          name
+        )}</span></div><button class="hover-close" title="Close">&#x2715;</button></div><div class="hover-loading"><div class="hover-spinner"></div><span>Loading…</span></div>`
+      );
+
+    frappe.call({
+      method: "hover_effect.api.get_hover_details",
+      args: { doctype, name },
+      callback: function (r) {
+        if (!r || !r.message) {
+          $hover_popover.html(`<div class="hover-error">Could not load details.</div>`);
+          return;
         }
-
-        if (current_list_doctype !== new_doctype) {
-            location.reload();
-        }
-
+        render_popover_content(r.message, doctype, name);
+      },
     });
+  }
 
-    const SUPPORTED_DOCTYPES = [
-        "Sales Invoice", "Purchase Invoice",
-        "Sales Order", "Purchase Order",
-        "Customer", "Supplier", "Payment Entry"
-    ];
+  /* ── Hide ── */
+  function hide_hover_popover() {
+    $backdrop.removeClass("visible").addClass("hidden");
+    $hover_popover.addClass("hidden").html("");
+    current_hovered = null;
+  }
 
-    let hover_timeout;
-    let current_hovered = null;
+  /* ── Helpers ── */
+  function fmt_currency(val, currency) {
+    if (val === undefined || val === null || val === "") return "—";
+    const num = parseFloat(val);
+    if (isNaN(num)) return "—";
+    const f = num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return currency ? `${currency} ${f}` : f;
+  }
 
-    /* ── Backdrop + Popover ── */
-    const $backdrop = $(`<div id="hover-effect-backdrop" class="hidden"></div>`).appendTo("body");
-    const $hover_popover = $(`<div id="custom-hover-popover" class="hidden"></div>`).appendTo("body");
-
-    /* ── Hover trigger ── */
-    $(document).on("mouseenter", "a.filterable.ellipsis", function (e) {
-        clearTimeout(hover_timeout);
-        let doctype = cur_list ? cur_list.doctype : null;
-        if (!doctype || !cur_list.data) return;
-        if (!SUPPORTED_DOCTYPES.includes(doctype)) return;
-
-        let $row = $(this).closest(".list-row");
-        let docname = $row.attr("data-name");
-        if (!docname) {
-            let idx = $(".list-row").index($row);
-            docname = cur_list.data[idx]?.name;
-        }
-        if (!docname || current_hovered === docname) return;
-        current_hovered = docname;
-
-        hover_timeout = setTimeout(() => show_hover_popover(doctype, docname), 350);
-    });
-
-    /* ── Hide on list row leave ── */
-    $(document).on("mouseleave", ".list-row", function () {
-        clearTimeout(hover_timeout);
-    });
-
-    /* ── Close on backdrop click ── */
-    $backdrop.on("click", hide_hover_popover);
-
-    /* ── Close on Escape ── */
-    $(document).on("keydown.hover_effect", function (e) {
-        if (e.key === "Escape") hide_hover_popover();
-    });
-
-    /* ── Prevent popover clicks from bubbling ── */
-    $hover_popover.on("click", function (e) { e.stopPropagation(); });
-
-
-    /* ── Show ── */
-    function show_hover_popover(doctype, name) {
-        $backdrop.removeClass("hidden").addClass("visible");
-        $hover_popover
-            .removeClass("hidden")
-            .html(`<div class="hover-header"><div class="hover-title">${frappe.utils.escape_html(doctype)}: <span class="hover-docname">${frappe.utils.escape_html(name)}</span></div><button class="hover-close" title="Close">&#x2715;</button></div><div class="hover-loading"><div class="hover-spinner"></div><span>Loading…</span></div>`);
-
-        frappe.call({
-            method: "hover_effect.api.get_hover_details",
-            args: { doctype, name },
-            callback: function (r) {
-                if (!r || !r.message) {
-                    $hover_popover.html(`<div class="hover-error">Could not load details.</div>`);
-                    return;
-                }
-                render_popover_content(r.message, doctype, name);
-            }
-        });
+  function fmt_date(val) {
+    if (!val) return "—";
+    try {
+      return frappe.datetime.str_to_user(val) || val;
+    } catch (_) {
+      return val;
     }
+  }
 
-    /* ── Hide ── */
-    function hide_hover_popover() {
-        $backdrop.removeClass("visible").addClass("hidden");
-        $hover_popover.addClass("hidden").html("");
-        current_hovered = null;
-    }
+  function esc(v) {
+    return frappe.utils.escape_html(String(v || ""));
+  }
 
+  function get_status_class(status) {
+    const map = {
+      Paid: "status-green",
+      Submitted: "status-green",
+      Active: "status-green",
+      Completed: "status-green",
+      Closed: "status-green",
+      "To Deliver and Bill": "status-blue",
+      "To Bill": "status-blue",
+      "To Deliver": "status-blue",
+      "To Receive and Bill": "status-blue",
+      "To Receive": "status-blue",
+      "To Pay": "status-blue",
+      "Partially Paid": "status-blue",
+      Unpaid: "status-orange",
+      "Partly Paid": "status-orange",
+      "On Hold": "status-orange",
+      Overdue: "status-red",
+      Cancelled: "status-red",
+      Return: "status-red",
+      Draft: "status-grey",
+      Disabled: "status-grey",
+    };
+    return map[status] || "status-grey";
+  }
 
-    /* ── Helpers ── */
-    function fmt_currency(val, currency) {
-        if (val === undefined || val === null || val === "") return "—";
-        const num = parseFloat(val);
-        if (isNaN(num)) return "—";
-        const f = num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        return currency ? `${currency} ${f}` : f;
-    }
+  function make_doc_table(rows, cols) {
+    if (!rows || !rows.length)
+      return `<div style="color:#8d99a6;font-size:12px;padding:6px 0">No records found</div>`;
+    const thead = cols.map((c) => `<th class="${c.cls || ""}">${c.label}</th>`).join("");
+    const tbody = rows
+      .map(
+        (row) =>
+          `<tr>${cols
+            .map((c) => `<td class="${c.cls || ""}">${c.render(row)}</td>`)
+            .join("")}</tr>`
+      )
+      .join("");
+    return `<table class="hover-table"><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`;
+  }
 
-    function fmt_date(val) {
-        if (!val) return "—";
-        try { return frappe.datetime.str_to_user(val) || val; } catch (_) { return val; }
-    }
+  function render_doc_section(title, rows, cols) {
+    if (!rows) return "";
+    return `<div class="hover-section"><div class="hover-section-title">${title}</div>${make_doc_table(rows, cols)}</div>`;
+  }
 
-    function esc(v) { return frappe.utils.escape_html(String(v || "")); }
-
-    function get_status_class(status) {
-        const map = {
-            "Paid": "status-green", "Submitted": "status-green", "Active": "status-green",
-            "Completed": "status-green", "Closed": "status-green",
-            "To Deliver and Bill": "status-blue", "To Bill": "status-blue",
-            "To Deliver": "status-blue", "To Receive and Bill": "status-blue",
-            "To Receive": "status-blue", "To Pay": "status-blue", "Partially Paid": "status-blue",
-            "Unpaid": "status-orange", "Partly Paid": "status-orange", "On Hold": "status-orange",
-            "Overdue": "status-red", "Cancelled": "status-red", "Return": "status-red",
-            "Draft": "status-grey", "Disabled": "status-grey",
-        };
-        return map[status] || "status-grey";
-    }
-
-    function make_doc_table(rows, cols) {
-        if (!rows || !rows.length) return `<div style="color:#8d99a6;font-size:12px;padding:6px 0">No records found</div>`;
-        const thead = cols.map(c => `<th class="${c.cls || ""}">${c.label}</th>`).join("");
-        const tbody = rows.map(row => `<tr>${cols.map(c => `<td class="${c.cls || ""}">${c.render(row)}</td>`).join("")}</tr>`).join("");
-        return `<table class="hover-table"><thead><tr>${thead}</tr></thead><tbody>${tbody}</tbody></table>`;
-    }
-
-    function render_doc_section(title, rows, cols) {
-        if (!rows) return "";
-        return `<div class="hover-section"><div class="hover-section-title">${title}</div>${make_doc_table(rows, cols)}</div>`;
-    }
-
-    function render_summary_cards(cards) {
-        return `<div class="hover-summary-cards">${cards.map(c => `
+  function render_summary_cards(cards) {
+    return `<div class="hover-summary-cards">${cards
+      .map(
+        (c) => `
             <div class="hover-summary-card ${c.cls || ""}">
                 <span class="hover-summary-card-label">${c.label}</span>
                 <span class="hover-summary-card-value">${c.value}</span>
                 <span class="hover-summary-card-count">${c.count}</span>
-            </div>`).join("")}</div>`;
+            </div>`
+      )
+      .join("")}</div>`;
+  }
+
+  /* ── Render ── */
+  function render_popover_content(data, doctype, name) {
+    const doc = data.doc || {};
+    const currency = doc.currency || doc.default_currency || "INR";
+
+    let party_label = "",
+      party_name = "",
+      meta_rows = [];
+
+    if (doctype === "Sales Invoice") {
+      party_label = "Customer";
+      party_name = doc.customer_name || doc.customer || "";
+      meta_rows = [
+        { label: "Date", value: fmt_date(doc.posting_date) },
+        { label: "Due Date", value: fmt_date(doc.due_date) },
+        { label: "Grand Total", value: fmt_currency(doc.grand_total, currency), bold: true },
+        { label: "Outstanding", value: fmt_currency(doc.outstanding_amount, currency) },
+      ];
+    } else if (doctype === "Purchase Invoice") {
+      party_label = "Supplier";
+      party_name = doc.supplier_name || doc.supplier || "";
+      meta_rows = [
+        { label: "Date", value: fmt_date(doc.posting_date) },
+        { label: "Due Date", value: fmt_date(doc.due_date) },
+        { label: "Grand Total", value: fmt_currency(doc.grand_total, currency), bold: true },
+        { label: "Outstanding", value: fmt_currency(doc.outstanding_amount, currency) },
+      ];
+    } else if (doctype === "Sales Order") {
+      party_label = "Customer";
+      party_name = doc.customer_name || doc.customer || "";
+      meta_rows = [
+        { label: "Date", value: fmt_date(doc.transaction_date) },
+        { label: "Delivery", value: fmt_date(doc.delivery_date) },
+        { label: "Grand Total", value: fmt_currency(doc.grand_total, currency), bold: true },
+        { label: "Advance Paid", value: fmt_currency(doc.advance_paid, currency) },
+      ];
+    } else if (doctype === "Purchase Order") {
+      party_label = "Supplier";
+      party_name = doc.supplier_name || doc.supplier || "";
+      meta_rows = [
+        { label: "Date", value: fmt_date(doc.transaction_date) },
+        { label: "Required By", value: fmt_date(doc.schedule_date) },
+        { label: "Grand Total", value: fmt_currency(doc.grand_total, currency), bold: true },
+        { label: "Advance Paid", value: fmt_currency(doc.advance_paid, currency) },
+      ];
+    } else if (doctype === "Payment Entry") {
+      party_label = "Party";
+      party_name = doc.party_name || doc.party || "";
+      meta_rows = [
+        { label: "Date", value: fmt_date(doc.posting_date) },
+        { label: "Mode", value: doc.mode_of_payment || "—" },
+        { label: "Paid Amount", value: fmt_currency(doc.paid_amount, currency), bold: true },
+        { label: "Type", value: doc.payment_type || "—" },
+      ];
+    } else if (doctype === "Customer") {
+      party_label = "Customer Group";
+      party_name = doc.customer_group || "";
+      meta_rows = [
+        { label: "Territory", value: doc.territory || "—" },
+        { label: "Type", value: doc.customer_type || "—" },
+        { label: "Tax ID", value: doc.tax_id || "—" },
+        { label: "Email", value: doc.email_id || "—" },
+        { label: "Mobile", value: doc.mobile_no || "—" },
+        { label: "Payment Terms", value: doc.payment_terms || "—" },
+      ];
+    } else if (doctype === "Supplier") {
+      party_label = "Supplier Group";
+      party_name = doc.supplier_group || "";
+      meta_rows = [
+        { label: "Type", value: doc.supplier_type || "—" },
+        { label: "Country", value: doc.country || "—" },
+        { label: "Tax ID", value: doc.tax_id || "—" },
+        { label: "Email", value: doc.email_id || "—" },
+        { label: "Mobile", value: doc.mobile_no || "—" },
+        { label: "Payment Terms", value: doc.payment_terms || "—" },
+      ];
     }
 
+    const status = doc.status || (doc.disabled ? "Disabled" : "");
+    const status_cls = get_status_class(status);
 
-    /* ── Render ── */
-    function render_popover_content(data, doctype, name) {
-        const doc = data.doc || {};
-        const currency = doc.currency || doc.default_currency || "INR";
-
-        let party_label = "", party_name = "", meta_rows = [];
-
-        if (doctype === "Sales Invoice") {
-            party_label = "Customer";
-            party_name = doc.customer_name || doc.customer || "";
-            meta_rows = [
-                { label: "Date", value: fmt_date(doc.posting_date) },
-                { label: "Due Date", value: fmt_date(doc.due_date) },
-                { label: "Grand Total", value: fmt_currency(doc.grand_total, currency), bold: true },
-                { label: "Outstanding", value: fmt_currency(doc.outstanding_amount, currency) },
-            ];
-        } else if (doctype === "Purchase Invoice") {
-            party_label = "Supplier";
-            party_name = doc.supplier_name || doc.supplier || "";
-            meta_rows = [
-                { label: "Date", value: fmt_date(doc.posting_date) },
-                { label: "Due Date", value: fmt_date(doc.due_date) },
-                { label: "Grand Total", value: fmt_currency(doc.grand_total, currency), bold: true },
-                { label: "Outstanding", value: fmt_currency(doc.outstanding_amount, currency) },
-            ];
-        } else if (doctype === "Sales Order") {
-            party_label = "Customer";
-            party_name = doc.customer_name || doc.customer || "";
-            meta_rows = [
-                { label: "Date", value: fmt_date(doc.transaction_date) },
-                { label: "Delivery", value: fmt_date(doc.delivery_date) },
-                { label: "Grand Total", value: fmt_currency(doc.grand_total, currency), bold: true },
-                { label: "Advance Paid", value: fmt_currency(doc.advance_paid, currency) },
-            ];
-        } else if (doctype === "Purchase Order") {
-            party_label = "Supplier";
-            party_name = doc.supplier_name || doc.supplier || "";
-            meta_rows = [
-                { label: "Date", value: fmt_date(doc.transaction_date) },
-                { label: "Required By", value: fmt_date(doc.schedule_date) },
-                { label: "Grand Total", value: fmt_currency(doc.grand_total, currency), bold: true },
-                { label: "Advance Paid", value: fmt_currency(doc.advance_paid, currency) },
-            ];
-        } else if (doctype === "Payment Entry") {
-            party_label = "Party";
-            party_name = doc.party_name || doc.party || "";
-            meta_rows = [
-                { label: "Date", value: fmt_date(doc.posting_date) },
-                { label: "Mode", value: doc.mode_of_payment || "—" },
-                { label: "Paid Amount", value: fmt_currency(doc.paid_amount, currency), bold: true },
-                { label: "Type", value: doc.payment_type || "—" },
-            ];
-        } else if (doctype === "Customer") {
-            party_label = "Customer Group";
-            party_name = doc.customer_group || "";
-            meta_rows = [
-                { label: "Territory", value: doc.territory || "—" },
-                { label: "Type", value: doc.customer_type || "—" },
-                { label: "Tax ID", value: doc.tax_id || "—" },
-                { label: "Email", value: doc.email_id || "—" },
-                { label: "Mobile", value: doc.mobile_no || "—" },
-                { label: "Payment Terms", value: doc.payment_terms || "—" },
-            ];
-        } else if (doctype === "Supplier") {
-            party_label = "Supplier Group";
-            party_name = doc.supplier_group || "";
-            meta_rows = [
-                { label: "Type", value: doc.supplier_type || "—" },
-                { label: "Country", value: doc.country || "—" },
-                { label: "Tax ID", value: doc.tax_id || "—" },
-                { label: "Email", value: doc.email_id || "—" },
-                { label: "Mobile", value: doc.mobile_no || "—" },
-                { label: "Payment Terms", value: doc.payment_terms || "—" },
-            ];
-        }
-
-        const status = doc.status || (doc.disabled ? "Disabled" : "");
-        const status_cls = get_status_class(status);
-
-        const meta_html = `
+    const meta_html = `
             <div class="hover-meta-grid">
-                ${party_label ? `<div class="hover-meta-item"><span class="hover-meta-label">${party_label}</span><span class="hover-meta-value">${esc(party_name || "—")}</span></div>` : ""}
-                ${status ? `<div class="hover-meta-item"><span class="hover-meta-label">Status</span><span class="hover-meta-value"><span class="status-pill ${status_cls}">${esc(status)}</span></span></div>` : ""}
-                ${meta_rows.map(r => `<div class="hover-meta-item"><span class="hover-meta-label">${r.label}</span><span class="hover-meta-value ${r.bold ? "hover-bold" : ""}">${r.value}</span></div>`).join("")}
+                ${
+                  party_label
+                    ? `<div class="hover-meta-item"><span class="hover-meta-label">${party_label}</span><span class="hover-meta-value">${esc(
+                        party_name || "—"
+                      )}</span></div>`
+                    : ""
+                }
+                ${
+                  status
+                    ? `<div class="hover-meta-item"><span class="hover-meta-label">Status</span><span class="hover-meta-value"><span class="status-pill ${status_cls}">${esc(
+                        status
+                      )}</span></span></div>`
+                    : ""
+                }
+                ${meta_rows
+                  .map(
+                    (r) =>
+                      `<div class="hover-meta-item"><span class="hover-meta-label">${
+                        r.label
+                      }</span><span class="hover-meta-value ${r.bold ? "hover-bold" : ""}">${
+                        r.value
+                      }</span></div>`
+                  )
+                  .join("")}
             </div>`;
 
-        /* ── Items ── */
-        let items_html = "";
-        if (data.items?.length) {
-            let tq = 0, ta = 0;
-            const rows = data.items.map(i => { tq += parseFloat(i.qty || 0); ta += parseFloat(i.amount || 0); return i; });
-            items_html = `<div class="hover-section"><div class="hover-section-title">Items</div>
+    /* ── Items ── */
+    let items_html = "";
+    if (data.items?.length) {
+      let tq = 0,
+        ta = 0;
+      const rows = data.items.map((i) => {
+        tq += parseFloat(i.qty || 0);
+        ta += parseFloat(i.amount || 0);
+        return i;
+      });
+      items_html = `<div class="hover-section"><div class="hover-section-title">Items</div>
                 <table class="hover-table">
                     <thead><tr><th>Item Name</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th></tr></thead>
-                    <tbody>${rows.map(i => `<tr>
+                    <tbody>${rows
+                      .map(
+                        (i) => `<tr>
                         <td>${esc(i.item_name || i.item_code || "—")}</td>
                         <td class="num">${i.qty ?? "—"}</td>
                         <td class="num">${fmt_currency(i.rate, currency)}</td>
                         <td class="num">${fmt_currency(i.amount, currency)}</td>
-                    </tr>`).join("")}</tbody>
-                    <tfoot><tr class="total-row"><td><b>Total</b></td><td class="num"><b>${tq}</b></td><td></td><td class="num"><b>${fmt_currency(ta, currency)}</b></td></tr></tfoot>
+                    </tr>`
+                      )
+                      .join("")}</tbody>
+                    <tfoot><tr class="total-row"><td><b>Total</b></td><td class="num"><b>${tq}</b></td><td></td><td class="num"><b>${fmt_currency(
+        ta,
+        currency
+      )}</b></td></tr></tfoot>
                 </table></div>`;
-        }
+    }
 
-        /* ── GL Entries ── */
-        let gl_html = "";
-        if (data.gl_entries?.length) {
-            let td = 0, tc = 0;
-            const rows = data.gl_entries.map(g => { td += parseFloat(g.debit || 0); tc += parseFloat(g.credit || 0); return g; });
-            gl_html = `<div class="hover-section"><div class="hover-section-title">GL Entries</div>
+    /* ── GL Entries ── */
+    let gl_html = "";
+    if (data.gl_entries?.length) {
+      let td = 0,
+        tc = 0;
+      const rows = data.gl_entries.map((g) => {
+        td += parseFloat(g.debit || 0);
+        tc += parseFloat(g.credit || 0);
+        return g;
+      });
+      gl_html = `<div class="hover-section"><div class="hover-section-title">GL Entries</div>
                 <table class="hover-table">
                     <thead><tr><th>Account</th><th class="num">Debit</th><th class="num">Credit</th><th>Remarks</th></tr></thead>
-                    <tbody>${rows.map(g => `<tr>
+                    <tbody>${rows
+                      .map(
+                        (g) => `<tr>
                         <td>${esc(g.account || "—")}</td>
                         <td class="num">${fmt_currency(g.debit)}</td>
                         <td class="num">${fmt_currency(g.credit)}</td>
                         <td class="remarks">${esc(g.remarks || "No Remarks")}</td>
-                    </tr>`).join("")}</tbody>
-                    <tfoot><tr class="total-row"><td><b>Total</b></td><td class="num"><b>${fmt_currency(td)}</b></td><td class="num"><b>${fmt_currency(tc)}</b></td><td></td></tr></tfoot>
+                    </tr>`
+                      )
+                      .join("")}</tbody>
+                    <tfoot><tr class="total-row"><td><b>Total</b></td><td class="num"><b>${fmt_currency(
+                      td
+                    )}</b></td><td class="num"><b>${fmt_currency(
+        tc
+      )}</b></td><td></td></tr></tfoot>
                 </table></div>`;
-        }
+    }
 
-        /* ── Payment Entry accounts ── */
-        let accounts_html = "";
-        if (doctype === "Payment Entry" && data.accounts?.length) {
-            accounts_html = `<div class="hover-section"><div class="hover-section-title">Accounts</div>
+    /* ── Payment Entry accounts ── */
+    let accounts_html = "";
+    if (doctype === "Payment Entry" && data.accounts?.length) {
+      accounts_html = `<div class="hover-section"><div class="hover-section-title">Accounts</div>
                 <table class="hover-table">
                     <thead><tr><th>Account</th><th class="num">Debit</th><th class="num">Credit</th></tr></thead>
-                    <tbody>${data.accounts.map(a => `<tr>
+                    <tbody>${data.accounts
+                      .map(
+                        (a) => `<tr>
                         <td>${esc(a.account || "—")}</td>
                         <td class="num">${fmt_currency(a.debit_in_account_currency, currency)}</td>
-                        <td class="num">${fmt_currency(a.credit_in_account_currency, currency)}</td>
-                    </tr>`).join("")}</tbody>
+                        <td class="num">${fmt_currency(
+                          a.credit_in_account_currency,
+                          currency
+                        )}</td>
+                    </tr>`
+                      )
+                      .join("")}</tbody>
                 </table></div>`;
-        }
+    }
 
-        /* ── Customer sections ── */
-        let party_html = "";
-        if (doctype === "Customer" && data.summary) {
-            const s = data.summary;
-            party_html += render_summary_cards([
-                { label: "Total Billed", value: fmt_currency(s.total_billed, currency), count: `${s.si_count} invoice${s.si_count !== 1 ? "s" : ""}` },
-                { label: "Outstanding", value: fmt_currency(s.total_outstanding, currency), count: "unpaid balance", cls: s.total_outstanding > 0 ? "warning" : "" },
-                { label: "Overdue", value: s.overdue_count, count: `invoice${s.overdue_count !== 1 ? "s" : ""}`, cls: s.overdue_count > 0 ? "danger" : "" },
-                { label: "Total Orders", value: fmt_currency(s.total_ordered, currency), count: `${s.so_count} order${s.so_count !== 1 ? "s" : ""}` },
-                { label: "Total Paid", value: fmt_currency(s.total_paid, currency), count: `${s.pe_count} payment${s.pe_count !== 1 ? "s" : ""}` },
-                { label: "Deliveries", value: s.dn_count, count: "delivery notes" },
-            ]);
-            party_html += render_doc_section("Sales Invoices", data.sales_invoices, [
-                { label: "Invoice", render: r => `<a href="/app/sales-invoice/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
-                { label: "Date", render: r => fmt_date(r.posting_date) },
-                { label: "Due", render: r => fmt_date(r.due_date) },
-                { label: "Amount", render: r => fmt_currency(r.grand_total, r.currency), cls: "num" },
-                { label: "Outstanding", render: r => fmt_currency(r.outstanding_amount, r.currency), cls: "num" },
-                { label: "Status", render: r => `<span class="status-pill ${get_status_class(r.status)}">${esc(r.status || "—")}</span>` },
-            ]);
-            party_html += render_doc_section("Sales Orders", data.sales_orders, [
-                { label: "Order", render: r => `<a href="/app/sales-order/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
-                { label: "Date", render: r => fmt_date(r.transaction_date) },
-                { label: "Delivery", render: r => fmt_date(r.delivery_date) },
-                { label: "Amount", render: r => fmt_currency(r.grand_total, r.currency), cls: "num" },
-                { label: "Advance", render: r => fmt_currency(r.advance_paid, r.currency), cls: "num" },
-                { label: "Status", render: r => `<span class="status-pill ${get_status_class(r.status)}">${esc(r.status || "—")}</span>` },
-            ]);
-            party_html += render_doc_section("Delivery Notes", data.delivery_notes, [
-                { label: "Note", render: r => `<a href="/app/delivery-note/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
-                { label: "Date", render: r => fmt_date(r.posting_date) },
-                { label: "Amount", render: r => fmt_currency(r.grand_total, r.currency), cls: "num" },
-                { label: "Status", render: r => `<span class="status-pill ${get_status_class(r.status)}">${esc(r.status || "—")}</span>` },
-            ]);
-            party_html += render_doc_section("Payments", data.payments, [
-                { label: "Entry", render: r => `<a href="/app/payment-entry/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
-                { label: "Date", render: r => fmt_date(r.posting_date) },
-                { label: "Mode", render: r => esc(r.mode_of_payment || "—") },
-                { label: "Amount", render: r => fmt_currency(r.paid_amount, r.currency), cls: "num" },
-                { label: "Type", render: r => esc(r.payment_type || "—") },
-            ]);
-        }
+    /* ── Customer sections ── */
+    let party_html = "";
+    if (doctype === "Customer" && data.summary) {
+      const s = data.summary;
+      party_html += render_summary_cards([
+        {
+          label: "Total Billed",
+          value: fmt_currency(s.total_billed, currency),
+          count: `${s.si_count} invoice${s.si_count !== 1 ? "s" : ""}`,
+        },
+        {
+          label: "Outstanding",
+          value: fmt_currency(s.total_outstanding, currency),
+          count: "unpaid balance",
+          cls: s.total_outstanding > 0 ? "warning" : "",
+        },
+        {
+          label: "Overdue",
+          value: s.overdue_count,
+          count: `invoice${s.overdue_count !== 1 ? "s" : ""}`,
+          cls: s.overdue_count > 0 ? "danger" : "",
+        },
+        {
+          label: "Total Orders",
+          value: fmt_currency(s.total_ordered, currency),
+          count: `${s.so_count} order${s.so_count !== 1 ? "s" : ""}`,
+        },
+        {
+          label: "Total Paid",
+          value: fmt_currency(s.total_paid, currency),
+          count: `${s.pe_count} payment${s.pe_count !== 1 ? "s" : ""}`,
+        },
+        { label: "Deliveries", value: s.dn_count, count: "delivery notes" },
+      ]);
+      party_html += render_doc_section("Sales Invoices", data.sales_invoices, [
+        {
+          label: "Invoice",
+          render: (r) =>
+            `<a href="/app/sales-invoice/${encodeURIComponent(r.name)}" target="_blank">${esc(
+              r.name
+            )}</a>`,
+        },
+        { label: "Date", render: (r) => fmt_date(r.posting_date) },
+        { label: "Due", render: (r) => fmt_date(r.due_date) },
+        { label: "Amount", render: (r) => fmt_currency(r.grand_total, r.currency), cls: "num" },
+        {
+          label: "Outstanding",
+          render: (r) => fmt_currency(r.outstanding_amount, r.currency),
+          cls: "num",
+        },
+        {
+          label: "Status",
+          render: (r) =>
+            `<span class="status-pill ${get_status_class(r.status)}">${esc(
+              r.status || "—"
+            )}</span>`,
+        },
+      ]);
+      party_html += render_doc_section("Sales Orders", data.sales_orders, [
+        {
+          label: "Order",
+          render: (r) =>
+            `<a href="/app/sales-order/${encodeURIComponent(r.name)}" target="_blank">${esc(
+              r.name
+            )}</a>`,
+        },
+        { label: "Date", render: (r) => fmt_date(r.transaction_date) },
+        { label: "Delivery", render: (r) => fmt_date(r.delivery_date) },
+        { label: "Amount", render: (r) => fmt_currency(r.grand_total, r.currency), cls: "num" },
+        { label: "Advance", render: (r) => fmt_currency(r.advance_paid, r.currency), cls: "num" },
+        {
+          label: "Status",
+          render: (r) =>
+            `<span class="status-pill ${get_status_class(r.status)}">${esc(
+              r.status || "—"
+            )}</span>`,
+        },
+      ]);
+      party_html += render_doc_section("Delivery Notes", data.delivery_notes, [
+        {
+          label: "Note",
+          render: (r) =>
+            `<a href="/app/delivery-note/${encodeURIComponent(r.name)}" target="_blank">${esc(
+              r.name
+            )}</a>`,
+        },
+        { label: "Date", render: (r) => fmt_date(r.posting_date) },
+        { label: "Amount", render: (r) => fmt_currency(r.grand_total, r.currency), cls: "num" },
+        {
+          label: "Status",
+          render: (r) =>
+            `<span class="status-pill ${get_status_class(r.status)}">${esc(
+              r.status || "—"
+            )}</span>`,
+        },
+      ]);
+      party_html += render_doc_section("Payments", data.payments, [
+        {
+          label: "Entry",
+          render: (r) =>
+            `<a href="/app/payment-entry/${encodeURIComponent(r.name)}" target="_blank">${esc(
+              r.name
+            )}</a>`,
+        },
+        { label: "Date", render: (r) => fmt_date(r.posting_date) },
+        { label: "Mode", render: (r) => esc(r.mode_of_payment || "—") },
+        { label: "Amount", render: (r) => fmt_currency(r.paid_amount, r.currency), cls: "num" },
+        { label: "Type", render: (r) => esc(r.payment_type || "—") },
+      ]);
+    }
 
-        /* ── Supplier sections ── */
-        if (doctype === "Supplier" && data.summary) {
-            const s = data.summary;
-            party_html += render_summary_cards([
-                { label: "Total Billed", value: fmt_currency(s.total_billed, currency), count: `${s.pi_count} invoice${s.pi_count !== 1 ? "s" : ""}` },
-                { label: "Outstanding", value: fmt_currency(s.total_outstanding, currency), count: "unpaid balance", cls: s.total_outstanding > 0 ? "warning" : "" },
-                { label: "Overdue", value: s.overdue_count, count: `invoice${s.overdue_count !== 1 ? "s" : ""}`, cls: s.overdue_count > 0 ? "danger" : "" },
-                { label: "Total Orders", value: fmt_currency(s.total_ordered, currency), count: `${s.po_count} order${s.po_count !== 1 ? "s" : ""}` },
-                { label: "Total Paid", value: fmt_currency(s.total_paid, currency), count: `${s.pe_count} payment${s.pe_count !== 1 ? "s" : ""}` },
-                { label: "Receipts", value: s.pr_count, count: "purchase receipts" },
-            ]);
-            party_html += render_doc_section("Purchase Invoices", data.purchase_invoices, [
-                { label: "Invoice", render: r => `<a href="/app/purchase-invoice/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
-                { label: "Date", render: r => fmt_date(r.posting_date) },
-                { label: "Due", render: r => fmt_date(r.due_date) },
-                { label: "Amount", render: r => fmt_currency(r.grand_total, r.currency), cls: "num" },
-                { label: "Outstanding", render: r => fmt_currency(r.outstanding_amount, r.currency), cls: "num" },
-                { label: "Status", render: r => `<span class="status-pill ${get_status_class(r.status)}">${esc(r.status || "—")}</span>` },
-            ]);
-            party_html += render_doc_section("Purchase Orders", data.purchase_orders, [
-                { label: "Order", render: r => `<a href="/app/purchase-order/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
-                { label: "Date", render: r => fmt_date(r.transaction_date) },
-                { label: "Required", render: r => fmt_date(r.schedule_date) },
-                { label: "Amount", render: r => fmt_currency(r.grand_total, r.currency), cls: "num" },
-                { label: "Advance", render: r => fmt_currency(r.advance_paid, r.currency), cls: "num" },
-                { label: "Status", render: r => `<span class="status-pill ${get_status_class(r.status)}">${esc(r.status || "—")}</span>` },
-            ]);
-            party_html += render_doc_section("Purchase Receipts", data.purchase_receipts, [
-                { label: "Receipt", render: r => `<a href="/app/purchase-receipt/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
-                { label: "Date", render: r => fmt_date(r.posting_date) },
-                { label: "Amount", render: r => fmt_currency(r.grand_total, r.currency), cls: "num" },
-                { label: "Status", render: r => `<span class="status-pill ${get_status_class(r.status)}">${esc(r.status || "—")}</span>` },
-            ]);
-            party_html += render_doc_section("Payments", data.payments, [
-                { label: "Entry", render: r => `<a href="/app/payment-entry/${encodeURIComponent(r.name)}" target="_blank">${esc(r.name)}</a>` },
-                { label: "Date", render: r => fmt_date(r.posting_date) },
-                { label: "Mode", render: r => esc(r.mode_of_payment || "—") },
-                { label: "Amount", render: r => fmt_currency(r.paid_amount, r.currency), cls: "num" },
-                { label: "Type", render: r => esc(r.payment_type || "—") },
-            ]);
-        }
+    /* ── Supplier sections ── */
+    if (doctype === "Supplier" && data.summary) {
+      const s = data.summary;
+      party_html += render_summary_cards([
+        {
+          label: "Total Billed",
+          value: fmt_currency(s.total_billed, currency),
+          count: `${s.pi_count} invoice${s.pi_count !== 1 ? "s" : ""}`,
+        },
+        {
+          label: "Outstanding",
+          value: fmt_currency(s.total_outstanding, currency),
+          count: "unpaid balance",
+          cls: s.total_outstanding > 0 ? "warning" : "",
+        },
+        {
+          label: "Overdue",
+          value: s.overdue_count,
+          count: `invoice${s.overdue_count !== 1 ? "s" : ""}`,
+          cls: s.overdue_count > 0 ? "danger" : "",
+        },
+        {
+          label: "Total Orders",
+          value: fmt_currency(s.total_ordered, currency),
+          count: `${s.po_count} order${s.po_count !== 1 ? "s" : ""}`,
+        },
+        {
+          label: "Total Paid",
+          value: fmt_currency(s.total_paid, currency),
+          count: `${s.pe_count} payment${s.pe_count !== 1 ? "s" : ""}`,
+        },
+        { label: "Receipts", value: s.pr_count, count: "purchase receipts" },
+      ]);
+      party_html += render_doc_section("Purchase Invoices", data.purchase_invoices, [
+        {
+          label: "Invoice",
+          render: (r) =>
+            `<a href="/app/purchase-invoice/${encodeURIComponent(r.name)}" target="_blank">${esc(
+              r.name
+            )}</a>`,
+        },
+        { label: "Date", render: (r) => fmt_date(r.posting_date) },
+        { label: "Due", render: (r) => fmt_date(r.due_date) },
+        { label: "Amount", render: (r) => fmt_currency(r.grand_total, r.currency), cls: "num" },
+        {
+          label: "Outstanding",
+          render: (r) => fmt_currency(r.outstanding_amount, r.currency),
+          cls: "num",
+        },
+        {
+          label: "Status",
+          render: (r) =>
+            `<span class="status-pill ${get_status_class(r.status)}">${esc(
+              r.status || "—"
+            )}</span>`,
+        },
+      ]);
+      party_html += render_doc_section("Purchase Orders", data.purchase_orders, [
+        {
+          label: "Order",
+          render: (r) =>
+            `<a href="/app/purchase-order/${encodeURIComponent(r.name)}" target="_blank">${esc(
+              r.name
+            )}</a>`,
+        },
+        { label: "Date", render: (r) => fmt_date(r.transaction_date) },
+        { label: "Required", render: (r) => fmt_date(r.schedule_date) },
+        { label: "Amount", render: (r) => fmt_currency(r.grand_total, r.currency), cls: "num" },
+        { label: "Advance", render: (r) => fmt_currency(r.advance_paid, r.currency), cls: "num" },
+        {
+          label: "Status",
+          render: (r) =>
+            `<span class="status-pill ${get_status_class(r.status)}">${esc(
+              r.status || "—"
+            )}</span>`,
+        },
+      ]);
+      party_html += render_doc_section("Purchase Receipts", data.purchase_receipts, [
+        {
+          label: "Receipt",
+          render: (r) =>
+            `<a href="/app/purchase-receipt/${encodeURIComponent(r.name)}" target="_blank">${esc(
+              r.name
+            )}</a>`,
+        },
+        { label: "Date", render: (r) => fmt_date(r.posting_date) },
+        { label: "Amount", render: (r) => fmt_currency(r.grand_total, r.currency), cls: "num" },
+        {
+          label: "Status",
+          render: (r) =>
+            `<span class="status-pill ${get_status_class(r.status)}">${esc(
+              r.status || "—"
+            )}</span>`,
+        },
+      ]);
+      party_html += render_doc_section("Payments", data.payments, [
+        {
+          label: "Entry",
+          render: (r) =>
+            `<a href="/app/payment-entry/${encodeURIComponent(r.name)}" target="_blank">${esc(
+              r.name
+            )}</a>`,
+        },
+        { label: "Date", render: (r) => fmt_date(r.posting_date) },
+        { label: "Mode", render: (r) => esc(r.mode_of_payment || "—") },
+        { label: "Amount", render: (r) => fmt_currency(r.paid_amount, r.currency), cls: "num" },
+        { label: "Type", render: (r) => esc(r.payment_type || "—") },
+      ]);
+    }
 
-        const slug = frappe.router.slug(doctype);
+    const slug = frappe.router.slug(doctype);
 
-        const html = `
+    const html = `
             <div class="hover-header">
                 <div class="hover-title">
-                    <a href="/app/${slug}/${encodeURIComponent(name)}" target="_blank" title="Open ${esc(name)}">
+                    <a href="/app/${slug}/${encodeURIComponent(
+      name
+    )}" target="_blank" title="Open ${esc(name)}">
                         ${esc(doctype)}: <span class="hover-docname">${esc(name)}</span>
                     </a>
                 </div>
@@ -566,14 +795,13 @@ $(document).ready(function () {
                 ${party_html}
             </div>`;
 
-        $hover_popover.html(html);
-    }
+    $hover_popover.html(html);
+  }
 
-    /* ── Close button ── */
-    $hover_popover.on("click", ".hover-close", function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        hide_hover_popover();
-    });
-
+  /* ── Close button ── */
+  $hover_popover.on("click", ".hover-close", function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    hide_hover_popover();
+  });
 });
