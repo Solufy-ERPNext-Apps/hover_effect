@@ -26,9 +26,6 @@ def get_hover_details(doctype, name):
     doc = frappe.get_doc(doctype, name)
     result = {"doc": doc.as_dict()}
 
-    # ----------------------------------------------------------
-    # Sales / Purchase Documents
-    # ----------------------------------------------------------
 
     if doctype in (
         "Sales Invoice",
@@ -62,10 +59,6 @@ def get_hover_details(doctype, name):
         else:
             result["gl_entries"] = []
 
-    # ----------------------------------------------------------
-    # Payment Entry
-    # ----------------------------------------------------------
-
     elif doctype == "Payment Entry":
 
         result["accounts"] = [
@@ -91,10 +84,6 @@ def get_hover_details(doctype, name):
         else:
             result["gl_entries"] = []
 
-    # ----------------------------------------------------------
-    # Customer / Supplier
-    # ----------------------------------------------------------
-
     elif doctype == "Customer":
         result.update(_get_customer_details(name))
 
@@ -103,10 +92,6 @@ def get_hover_details(doctype, name):
 
     return result
 
-
-# ==============================================================
-# Helper for SUM queries (fix for frappe v15+ restriction)
-# ==============================================================
 
 def get_sum(doctype, field, filters):
     value = frappe.db.sql(
@@ -119,10 +104,6 @@ def get_sum(doctype, field, filters):
     )
     return value[0][0] or 0
 
-
-# ==============================================================
-# Customer Details
-# ==============================================================
 
 def _get_customer_details(name):
 
@@ -196,10 +177,6 @@ def _get_customer_details(name):
         r["doctype"] = "Payment Entry"
         r["currency"] = r.pop("paid_from_account_currency", "INR")
 
-    # ----------------------------------------------------------
-    # Totals (FIXED)
-    # ----------------------------------------------------------
-
     total_billed = get_sum(
         "Sales Invoice",
         "grand_total",
@@ -249,10 +226,6 @@ def _get_customer_details(name):
 
     return data
 
-
-# ==============================================================
-# Supplier Details
-# ==============================================================
 
 def _get_supplier_details(name):
 
